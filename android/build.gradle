@@ -1,0 +1,78 @@
+apply plugin: 'com.android.application'
+
+configurations { natives }
+
+android {
+    namespace "com.vprieto.rebots"
+    compileSdk = 35
+    sourceSets {
+        main {
+            manifest.srcFile 'src/main/AndroidManifest.xml'
+            java.srcDirs = ['src/main/java']
+            res.srcDirs = ['res']
+            assets.srcDirs = ['../assets']
+            jniLibs.srcDirs = ['libs']
+        }
+    }
+    defaultConfig {
+        applicationId "com.vprieto.rebots"
+        minSdk = 21
+        targetSdk = 35
+        versionCode = 1
+        versionName = "1.0"
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+}
+
+dependencies {
+    implementation project(':core')
+    api "com.badlogicgames.gdx:gdx-backend-android:$gdxVersion"
+    natives "com.badlogicgames.gdx:gdx-platform:$gdxVersion:natives-armeabi-v7a"
+    natives "com.badlogicgames.gdx:gdx-platform:$gdxVersion:natives-arm64-v8a"
+    natives "com.badlogicgames.gdx:gdx-platform:$gdxVersion:natives-x86"
+    natives "com.badlogicgames.gdx:gdx-platform:$gdxVersion:natives-x86_64"
+}
+
+// Repetir la tarea de copiar las librerías nativas si es necesario
+tasks.register('copyAndroidNatives') {
+    doFirst {
+        file("libs/armeabi-v7a/").mkdirs()
+        file("libs/arm64-v8a/").mkdirs()
+        file("libs/x86_64/").mkdirs()
+        file("libs/x86/").mkdirs()
+
+        configurations.natives.copy().files.each { jar ->
+            def outputDir = null
+            if (jar.name.contains("armeabi-v7a")) outputDir = file("libs/armeabi-v7a")
+            if (jar.name.contains("arm64-v8a")) outputDir = file("libs/arm64-v8a")
+            if (jar.name.contains("x86_64")) outputDir = file("libs/x86_64")
+            if (jar.name.contains("x86")) outputDir = file("libs/x86")
+
+            if (outputDir != null) {
+                copy {
+                    from zipTree(jar)
+                    into outputDir
+                    include "*.so"
+                }
+            }
+        }
+    }
+}
+
+tasks.matching { it.name.contains("merge") && it.name.contains("JniLibFolders") }.configureEach { it.dependsOn 'copyAndroidNatives' }
+
+tasks.register('run', Exec) {
+    def adb = android.getAdbExe().toString()
+    def name = ":" + project.name
+    dependsOn "installDebug"
+    commandLine adb, 'shell', 'am', 'start', '-n', 'com.vprieto.rebots/com.vprieto.rebots.AndroidLauncher'
+}
